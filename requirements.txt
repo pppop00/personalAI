@@ -1,0 +1,10 @@
+langchain
+langchain-openai
+langchain-chroma
+python-dotenv
+gradio
+matplotlib
+scikit-learn
+plotly
+numpy
+sentence-transformers
