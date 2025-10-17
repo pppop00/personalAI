@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.prompts import PromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
 
 # price is a factor for our company, so we're going to use a low cost model
 
@@ -99,13 +100,49 @@ llm = ChatOpenAI(temperature=0.7, model_name=MODEL)
 # llm = ChatOpenAI(temperature=0.7, model_name='llama3.2', base_url='http://localhost:11434/v1', api_key='ollama')
 
 # set up the conversation memory for the chat
-memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True)
+memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
 
 # the retriever is an abstraction over the VectorStore that will be used during RAG
-retriever = vectorstore.as_retriever()
+# Increase k to retrieve more documents for better context
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
-# putting it together: set up the conversation chain with the GPT 3.5 LLM, the vector store and memory
-conversation_chain = ConversationalRetrievalChain.from_llm(llm=llm, retriever=retriever, memory=memory)
+# Create a custom system prompt to encourage reasoning and inference
+system_template = """You are an intelligent AI assistant analyzing Oliver's professional background and qualifications.
+
+You have access to Oliver's documents including resumes, LinkedIn profile, projects, papers, and work history.
+
+Your job is to:
+1. Carefully analyze the provided context from Oliver's documents
+2. Make reasonable inferences and connections between different pieces of information
+3. Provide thoughtful, evidence-based answers
+4. If asked about Oliver's fit for a position, analyze his skills, experience, and projects to give a reasoned opinion
+5. Always cite specific examples from the documents when making your points
+6. If you genuinely don't have enough information, say so, but try to provide what relevant information you do have
+
+Be analytical, professional, and helpful. Don't just say "I don't know" - use the information available to make informed assessments.
+
+Context from Oliver's documents:
+{context}
+
+Chat History:
+{chat_history}
+"""
+
+# Create the custom prompt
+messages = [
+    SystemMessagePromptTemplate.from_template(system_template),
+    HumanMessagePromptTemplate.from_template("{question}")
+]
+qa_prompt = ChatPromptTemplate.from_messages(messages)
+
+# putting it together: set up the conversation chain with the LLM, the vector store and memory
+conversation_chain = ConversationalRetrievalChain.from_llm(
+    llm=llm, 
+    retriever=retriever, 
+    memory=memory,
+    return_source_documents=True,
+    combine_docs_chain_kwargs={"prompt": qa_prompt}
+)
 
 # Wrapping that in a function
 
